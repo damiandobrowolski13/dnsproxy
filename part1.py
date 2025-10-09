@@ -1,5 +1,7 @@
+from io import BytesIO
 import socket
 import threading
+import struct
 
 LISTEN_IP = '127.0.0.1'
 PROXY_PORT = 1053
@@ -7,7 +9,7 @@ DEFAULT_UPSTREAM_DNS = "8.8.8.8"
 DNS_PORT = 53
 
 # timeout params
-UPSTREAM_TIMEOUT = 0.0000000002
+UPSTREAM_TIMEOUT = 2.0
 RETRIES = 3                
 
 def run_proxy():
@@ -24,7 +26,7 @@ def run_proxy():
 
 def handle_dns_request(data, addr, sock):
     print(f"Received DNS request from {addr}")
-    print(f"Request data: {data.hex()}")
+    print(f"Request data: {parse_dns_request(data)}")
     
     try:
         upstream_dns_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -63,6 +65,72 @@ def handle_dns_request(data, addr, sock):
     finally:
         if upstream_dns_socket:
             upstream_dns_socket.close()
+
+def parse_dns_request(data):
+    reader = BytesIO(data)
+
+    # Skip header bytes
+    reader.seek(12)
+
+    # Parse name
+    labels = []
+    while True:
+        length = reader.read(1)[0]
+        if length == 0:
+            break
+        labels.append(reader.read(length).decode('utf-8'))
+    name = ".".join(labels)
+
+    # Parse type
+    typeInt = struct.unpack("!H", reader.read(2))[0]
+    type = DNS_TYPE_MAP.get(typeInt, f"Unknown({typeInt})")
+
+    return name, type
+
+DNS_TYPE_MAP = {
+    1: "A",
+    2: "NS",
+    5: "CNAME",
+    6: "SOA",
+    12: "PTR",
+    13: "HINFO",
+    14: "MINFO",
+    15: "MX",
+    16: "TXT",
+    17: "RP",
+    18: "AFSDB",
+    24: "SIG",
+    25: "KEY",
+    28: "AAAA",
+    29: "LOC",
+    33: "SRV",
+    35: "NAPTR",
+    36: "KX",
+    37: "CERT",
+    39: "DNAME",
+    41: "OPT",
+    43: "DS",
+    46: "RRSIG",
+    47: "NSEC",
+    48: "DNSKEY",
+    49: "DHCID",
+    50: "NSEC3",
+    51: "NSEC3PARAM",
+    52: "TLSA",
+    55: "HIP",
+    59: "CDS",
+    60: "CDNSKEY",
+    61: "OPENPGPKEY",
+    62: "CSYNC",
+    64: "SVCB",
+    65: "HTTPS",
+    99: "SPF",
+    108: "EUI48",
+    109: "EUI64",
+    255: "ANY",
+    256: "URI",
+    257: "CAA",
+}
 
 if __name__ == "__main__":
     run_proxy()
