@@ -22,15 +22,29 @@ def handle_dns_request(data, addr, sock):
     
     try:
         upstream_dns_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        upstream_dns_socket.sendto(data, (DEFAULT_UPSTREAM_DNS, 53))
-        response, _ = upstream_dns_socket.recvfrom(2048)
-        upstream_dns_socket.close()
+        response = None
+
+        attempt = 0
+        while attempt < 3:
+            try:
+                upstream_dns_socket.sendto(data, (DEFAULT_UPSTREAM_DNS, 53))
+                response, _ = upstream_dns_socket.recvfrom(2048)
+                break
+            
+            except Exception as e:
+                attempt += 1
+                if attempt == 3:
+                    print(f"Failed to get response from upstream DNS after 3 attempts: {e}")
+                    response = 'ERROR: Upstream DNS unreachable'.encode()
 
         sock.sendto(response, addr)
         print(f"Sent response back to {addr}")
+        upstream_dns_socket.close()
 
     except Exception as e:
-        print(f"Error handling DNS request from {addr}: {e}")
+        print(f"Error handling DNS request in thread from {addr}: {e}")
+
+ 
 
 if __name__ == "__main__":
     run_proxy()
