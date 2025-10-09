@@ -7,7 +7,7 @@ DEFAULT_UPSTREAM_DNS = "8.8.8.8"
 DNS_PORT = 53
 
 # timeout params
-UPSTREAM_TIMEOUT = 2.0
+UPSTREAM_TIMEOUT = 0.0000000002
 RETRIES = 3                
 
 def run_proxy():
@@ -41,6 +41,19 @@ def handle_dns_request(data, addr, sock):
             except Exception as e:
                 print(f"Upstream error on attempt {attempt+1}/{RETRIES}: {e}")
                 response = 'ERROR: Upstream DNS unreachable'.encode()
+
+        if response is None:
+            try:
+                # preserve original 2-byte ID and question section
+                id_bytes = data[0:2]
+                qdcount = data[4:6]
+                # flags: QR=1, RCODE=2 (SERVFAIL) -> 0x8182; set answer/authority/additional counts to 0
+                servfail_hdr = id_bytes + b'\x81\x82' + qdcount + b'\x00\x00\x00\x00\x00\x00'
+                question = data[12:]
+                response = servfail_hdr + question
+                print("No upstream reply — sending SERVFAIL to client")
+            except Exception:
+                response = b''
 
         sock.sendto(response, addr)
         print(f"Sent response back to {addr}")
