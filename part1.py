@@ -69,10 +69,10 @@ def handle_dns_request(data, addr, sock):
 def parse_dns_request(data):
     reader = BytesIO(data)
 
-    # Skip header bytes
+    # skip header bytes
     reader.seek(12)
 
-    # Parse name
+    # parse name
     labels = []
     while True:
         length = reader.read(1)[0]
@@ -81,7 +81,7 @@ def parse_dns_request(data):
         labels.append(reader.read(length).decode('utf-8'))
     name = ".".join(labels)
 
-    # Parse type
+    # parse type
     typeInt = struct.unpack("!H", reader.read(2))[0]
     type = DNS_TYPE_MAP.get(typeInt, f"Unknown({typeInt})")
 
