@@ -2,7 +2,7 @@
 A simple DNS proxy w/ an HTTPS wrapper for DNS over HTTPS (DoH)
 
 ## Authors: 
-Charles Kozel ()
+Charles Kozel (QHP7002)
 Damian Dobrowolski (rnz5773)
 
 ## How to Run:
@@ -33,6 +33,5 @@ Additions for Part 2 implement a simple DNS-over-HTTPS (DoH) wrapper while keepi
   1. Receive UDP packet from client & parse the 1st question (QNAME/QTYPE) for logging
   2. Attempt DoH resolution via https://dns.google/resolve using requests (params: name, type)
   3. If the JSON Answer array exists, convert Answer entries to dnspython RRs, build a dns.message response w/ dns.message.make_response(req) to preserve the original ID, flags, & question, then return reply.to_wire() to client
-  4. If DoH yields no answers or fails, fall back to the original UDP upstream server w/ configurable UPSTREAM_TIMEOUT & RETRIES
-  5. If all resolution attempts fail, craft a minimal SERVFAIL response that preserves the original 2-byte transaction ID & question section so clients can match replies
+  4. If all resolution attempts fail, craft a minimal SERVFAIL response that preserves the original 2-byte transaction ID & question section so clients can match replies
 - Supported types: A & CNAME (others that dnspython can parse from JSON are handled too)
