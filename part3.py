@@ -3,38 +3,46 @@ import threading
 import requests
 import dns.message
 import dns.rcode
+import time
 
 LISTEN_IP = '127.0.0.1'
 PROXY_PORT = 1053
 HTTPS_DNS_URL = "https://dns.google/resolve"
 
 UPSTREAM_TIMEOUT = 2.0
-RETRIES = 3                
+RETRIES = 3
+
+# Global session object for connection reuse
+https_session = requests.Session()
 
 def run_proxy():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((LISTEN_IP, PROXY_PORT))
     print(f"DNS proxy listening on port: {PROXY_PORT}")
 
-    while True:
-        data, addr = sock.recvfrom(2048)
-
-        # non-blocking request handling
-        thread = threading.Thread(target=handle_dns_request, args=(data, addr, sock))
-        thread.start()
+    try:
+        while True:
+            data, addr = sock.recvfrom(2048)
+            thread = threading.Thread(target=handle_dns_request, args=(data, addr, sock))
+            thread.start()
+    finally:
+        https_session.close()
 
 def handle_dns_request(data, addr, sock):
     """
     Use Google's JSON DoH API (/resolve) to answer the first question.
     Convert JSON Answer records into a dns.message response and return wire bytes.
     Supports A and CNAME (and other types that dnspython can parse from text).
+    Uses a persistent HTTPS connection via requests.Session.
     """
     print(f"Received DNS request from {addr}")
+    # Measure the time to resolve the DNS query
+    start_time = time.time()
     
     try:
         # Parse the incoming UDP DNS request
         dns_query_msg = dns.message.from_wire(data)
-        print(f"Parsed DNS message: {dns_query_msg}")
+        #print(f"Parsed DNS message: {dns_query_msg}")
         
         # Extract query details
         question = dns_query_msg.question[0]
@@ -43,11 +51,12 @@ def handle_dns_request(data, addr, sock):
         
         print(f"Query: {query_name} {query_type}")
         
-        # Make HTTPS DNS request using Google's JSON API
+        # Make HTTPS DNS request using Google's JSON API with persistent session
         response = None
         for attempt in range(RETRIES):
             try:
-                http_response = requests.get(
+                # Use the global session object for persistent connections
+                http_response = https_session.get(
                     HTTPS_DNS_URL, 
                     params={
                         'name': query_name,
@@ -58,7 +67,7 @@ def handle_dns_request(data, addr, sock):
 
                 if http_response.status_code == 200:
                     json_response = http_response.json()
-                    print(f"JSON response: {json_response}")
+                    #print(f"JSON response: {json_response}")
 
                     response = json_to_dns_message(dns_query_msg, json_response)
                     break
@@ -77,7 +86,11 @@ def handle_dns_request(data, addr, sock):
         response_bytes = response.to_wire()
         print(f"Response size: {len(response_bytes)} bytes")
         sock.sendto(response_bytes, addr)
-        print(f"Sent DNS response back to {addr}")
+
+        # Log the elapsed time for the DNS query
+        end_time = time.time()
+        elapsed_time = (end_time - start_time) * 1000  # Convert to milliseconds
+        print(f"Sent DNS response back to {addr}. Elapsed time: {elapsed_time:.2f}ms")
         
     except Exception as e:
         print(f"Error handling DNS request from {addr}: {e}")
